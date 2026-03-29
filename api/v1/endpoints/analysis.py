@@ -803,3 +803,80 @@ def _build_analysis_report(
         strategy=strategy,
         details=details
     )
+
+
+@router.get("/fundamental/{stock_code}")
+async def get_fundamental(
+    stock_code: str,
+    config: Config = Depends(get_config_dep),
+) -> Dict[str, Any]:
+    """
+    GET /api/v1/analysis/fundamental/{stock_code}
+    实时采集并返回个股完整基本面数据。
+    """
+    from data_provider.base import DataFetcherManager
+
+    stock_code = normalize_stock_code(stock_code)
+    try:
+        manager = DataFetcherManager.get_instance()
+        fc = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: manager.get_fundamental_context(stock_code)
+        )
+    except Exception as e:
+        logger.error(f"fundamental fetch failed: {stock_code} err={e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    # 从 fc 各模块提取结构化数据
+    def _data(module: str):
+        return (fc.get(module) or {}).get("data") or {}
+
+    val = _data("valuation")
+    grow = _data("growth")
+    earn = _data("earnings")
+    inst = _data("institution")
+    cf = _data("capital_flow")
+    dt = _data("dragon_tiger")
+    boards = _data("boards")
+    belong = fc.get("belong_boards") or []
+
+    return {
+        "stock_code": stock_code,
+        "status": fc.get("status"),
+        "elapsed_ms": fc.get("elapsed_ms"),
+        "valuation": {
+            "pe_ratio": val.get("pe_ratio"),
+            "pb_ratio": val.get("pb_ratio"),
+            "total_mv": val.get("total_mv"),
+            "circ_mv": val.get("circ_mv"),
+        } if val else None,
+        "growth": {
+            "revenue_yoy": grow.get("revenue_yoy"),
+            "net_profit_yoy": grow.get("net_profit_yoy"),
+            "roe": grow.get("roe"),
+            "gross_margin": grow.get("gross_margin"),
+        } if grow else None,
+        "earnings": {
+            "financial_report": earn.get("financial_report"),
+            "dividend": earn.get("dividend"),
+        } if earn else None,
+        "institution": {
+            "institution_holding_change": inst.get("institution_holding_change"),
+            "top10_holder_change": inst.get("top10_holder_change"),
+        } if inst else None,
+        "capital_flow": {
+            "stock_flow": cf.get("stock_flow"),
+            "sector_rankings": cf.get("sector_rankings"),
+        } if cf else None,
+        "dragon_tiger": {
+            "is_on_list": dt.get("is_on_list"),
+            "recent_count": dt.get("recent_count"),
+            "latest_date": dt.get("latest_date"),
+        } if dt else None,
+        "boards": {
+            "top": boards.get("top"),
+            "bottom": boards.get("bottom"),
+        } if boards else None,
+        "belong_boards": belong,
+        "errors": fc.get("errors") or [],
+    }
