@@ -237,6 +237,58 @@ def _build_dividend_payload(
     }
 
 
+def _pick_by_indicator_name(df: pd.DataFrame, keywords: List[str]) -> Optional[float]:
+    """
+    从行式财务数据中按「指标」列名称查找对应最新期数值。
+    适用于 stock_financial_abstract 等返回格式：
+      列: [选项, 指标, 20250930, 20250630, ...]
+      行: 每行一个指标
+    """
+    if df is None or df.empty:
+        return None
+    indicator_col = next(
+        (c for c in df.columns if str(c) in ("指标", "科目", "项目")), None
+    )
+    if indicator_col is None:
+        return None
+    # 找最新日期列（第3列起，取第一个非空列）
+    date_cols = [c for c in df.columns if str(c) not in ("选项", "指标", "科目", "项目")]
+    if not date_cols:
+        return None
+    latest_col = date_cols[0]
+    for kw in keywords:
+        matched = df[df[indicator_col].astype(str).str.contains(kw, na=False, regex=False)]
+        if not matched.empty:
+            val = matched.iloc[0][latest_col]
+            result = _safe_float(val)
+            if result is not None:
+                return result
+    return None
+
+
+def _pick_latest_report_date(df: pd.DataFrame) -> Optional[str]:
+    """
+    从行式财务数据中提取最新报告期（第一个日期列名）。
+    """
+    if df is None or df.empty:
+        return None
+    date_cols = [c for c in df.columns if str(c) not in ("选项", "指标", "科目", "项目")]
+    if not date_cols:
+        return None
+    raw = str(date_cols[0])
+    # 格式化 20250930 -> 2025-09-30
+    if len(raw) == 8 and raw.isdigit():
+        return f"{raw[:4]}-{raw[4:6]}-{raw[6:8]}"
+    return raw
+
+
+def _is_row_style_df(df: pd.DataFrame) -> bool:
+    """判断是否为行式财务数据（指标名在行里而非列名）。"""
+    if df is None or df.empty:
+        return False
+    return any(str(c) in ("指标", "科目", "项目") for c in df.columns)
+
+
 def _extract_latest_row(df: pd.DataFrame, stock_code: str) -> Optional[pd.Series]:
     """
     Select the most relevant row for the given stock.
@@ -310,8 +362,21 @@ class AkshareFundamentalAdapter:
         ])
         result["errors"].extend(fin_errors)
         if fin_df is not None:
-            row = _extract_latest_row(fin_df, stock_code)
-            if row is not None:
+            if _is_row_style_df(fin_df):
+                # 行式结构：stock_financial_abstract 等，指标名在「指标」列
+                revenue_yoy = _pick_by_indicator_name(fin_df, ["营业总收入增长率", "营业收入增长率", "营收增长率"])
+                profit_yoy = _pick_by_indicator_name(fin_df, ["归属母公司净利润增长率", "净利润增长率", "归母净利润增长率"])
+                roe = _pick_by_indicator_name(fin_df, ["净资产收益率(ROE)", "净资产收益率", "ROE"])
+                gross_margin = _pick_by_indicator_name(fin_df, ["毛利率"])
+                report_date = _pick_latest_report_date(fin_df)
+                revenue = _pick_by_indicator_name(fin_df, ["营业总收入", "营业收入"])
+                net_profit_parent = _pick_by_indicator_name(fin_df, ["归母净利润"])
+                operating_cash_flow = _pick_by_indicator_name(fin_df, ["经营现金流量净额", "经营活动现金流量净额"])
+            else:
+                # 列式结构：其他 API
+                row = _extract_latest_row(fin_df, stock_code)
+                if row is None:
+                    row = pd.Series(dtype=object)
                 revenue_yoy = _safe_float(_pick_by_keywords(row, ["营业收入同比", "营收同比", "收入同比", "同比增长"]))
                 profit_yoy = _safe_float(_pick_by_keywords(row, ["净利润同比", "净利同比", "归母净利润同比"]))
                 roe = _safe_float(_pick_by_keywords(row, ["净资产收益率", "ROE", "净资产收益"]))
@@ -322,22 +387,22 @@ class AkshareFundamentalAdapter:
                 operating_cash_flow = _safe_float(
                     _pick_by_keywords(row, ["经营活动产生的现金流量净额", "经营现金流", "经营活动现金流"])
                 )
-                result["growth"] = {
-                    "revenue_yoy": revenue_yoy,
-                    "net_profit_yoy": profit_yoy,
-                    "roe": roe,
-                    "gross_margin": gross_margin,
-                }
-                financial_report_payload = {
-                    "report_date": report_date,
-                    "revenue": revenue,
-                    "net_profit_parent": net_profit_parent,
-                    "operating_cash_flow": operating_cash_flow,
-                    "roe": roe,
-                }
-                if any(v is not None for v in financial_report_payload.values()):
-                    result["earnings"]["financial_report"] = financial_report_payload
-                result["source_chain"].append(f"growth:{fin_source}")
+            result["growth"] = {
+                "revenue_yoy": revenue_yoy,
+                "net_profit_yoy": profit_yoy,
+                "roe": roe,
+                "gross_margin": gross_margin,
+            }
+            financial_report_payload = {
+                "report_date": report_date,
+                "revenue": revenue,
+                "net_profit_parent": net_profit_parent,
+                "operating_cash_flow": operating_cash_flow,
+                "roe": roe,
+            }
+            if any(v is not None for v in financial_report_payload.values()):
+                result["earnings"]["financial_report"] = financial_report_payload
+            result["source_chain"].append(f"growth:{fin_source}")
 
         # Earnings forecast
         forecast_df, forecast_source, forecast_errors = self._call_df_candidates([
