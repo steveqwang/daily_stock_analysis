@@ -1821,8 +1821,7 @@ class DataFetcherManager:
             nonlocal remaining_seconds
             remaining_seconds = max(0.0, remaining_seconds - consumed_ms / 1000.0)
 
-        # valuation 阶段最多占用 2s，避免实时行情慢时吃尽 stage budget
-        valuation_timeout = min(fetch_timeout, remaining_seconds, 2.0)
+        valuation_timeout = min(fetch_timeout, remaining_seconds)
         if valuation_timeout > 0:
             quote_payload, valuation_err, valuation_ms = self._run_with_retry(
                 lambda: self.get_realtime_quote(stock_code),
