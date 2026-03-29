@@ -197,7 +197,7 @@ export const ReportFundamental: React.FC<ReportFundamentalProps> = ({
                     {sectorRankings.top.slice(0, 3).map((item: any, idx: number) => (
                       <div key={idx} className="flex justify-between items-center text-xs py-0.5">
                         <span className="text-secondary-text truncate">{item.name}</span>
-                        <span className="text-success font-mono ml-1">{formatCurrency(item.net_inflow)}</span>
+                        <span className="text-success font-mono ml-1">{item.net_inflow != null ? formatCurrency(item.net_inflow) : formatPercent(item.change_pct)}</span>
                       </div>
                     ))}
                   </div>
@@ -208,7 +208,7 @@ export const ReportFundamental: React.FC<ReportFundamentalProps> = ({
                     {sectorRankings.bottom.slice(0, 3).map((item: any, idx: number) => (
                       <div key={idx} className="flex justify-between items-center text-xs py-0.5">
                         <span className="text-secondary-text truncate">{item.name}</span>
-                        <span className="text-danger font-mono ml-1">{formatCurrency(item.net_inflow)}</span>
+                        <span className="text-danger font-mono ml-1">{item.net_inflow != null ? formatCurrency(item.net_inflow) : formatPercent(item.change_pct)}</span>
                       </div>
                     ))}
                   </div>
