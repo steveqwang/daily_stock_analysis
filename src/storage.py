@@ -1076,6 +1076,13 @@ class DatabaseManager:
         if save_snapshot and context_snapshot is not None:
             context_text = self._safe_json_dumps(context_snapshot)
 
+        # 从 context_snapshot 中提取基本面数据
+        fundamental_data = self._extract_fundamental_data(context_snapshot)
+        
+        # 添加基本面数据到 raw_result（在序列化之前）
+        if fundamental_data:
+            raw_result.update(fundamental_data)
+
         record = AnalysisHistory(
             query_id=query_id,
             code=result.code,
@@ -1537,6 +1544,48 @@ class DatabaseManager:
             'raw_response': getattr(result, 'raw_response', None),
         })
         return data
+
+    @staticmethod
+    def _extract_fundamental_data(context_snapshot: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        从 context_snapshot 中提取基本面数据
+        
+        返回格式与 ReportDetails 中的基本面字段一致：
+        - financialReport
+        - dividendMetrics
+        - belongBoards
+        - sectorRankings
+        """
+        if not isinstance(context_snapshot, dict):
+            return {}
+
+        fundamental_data = {}
+
+        # 从 fundamental_context 中提取数据
+        fundamental_context = context_snapshot.get("fundamental_context")
+        if isinstance(fundamental_context, dict):
+            # 提取财务报告
+            earnings = fundamental_context.get("earnings", {})
+            if isinstance(earnings, dict):
+                financial_report = earnings.get("financial_report")
+                if isinstance(financial_report, dict) and financial_report:
+                    fundamental_data["financialReport"] = financial_report
+                
+                dividend = earnings.get("dividend")
+                if isinstance(dividend, dict) and dividend:
+                    fundamental_data["dividendMetrics"] = dividend
+
+            # 提取所属板块
+            belong_boards = fundamental_context.get("belong_boards")
+            if isinstance(belong_boards, list) and belong_boards:
+                fundamental_data["belongBoards"] = belong_boards
+
+            # 提取板块涨跌排名
+            sector_rankings = fundamental_context.get("sector_rankings")
+            if isinstance(sector_rankings, dict) and sector_rankings:
+                fundamental_data["sectorRankings"] = sector_rankings
+
+        return fundamental_data
 
     @staticmethod
     def _parse_sniper_value(value: Any) -> Optional[float]:

@@ -681,15 +681,23 @@ def _load_sync_fundamental_sources(
         from src.storage import DatabaseManager
 
         db = DatabaseManager.get_instance()
+        # 等待一小段时间确保数据已保存到数据库
+        import time
+        time.sleep(0.5)
+        
         records = db.get_analysis_history(query_id=query_id, code=stock_code, limit=1)
         context_snapshot = None
         if records:
             context_snapshot = parse_json_field(getattr(records[0], "context_snapshot", None))
+            logger.debug(f"Loaded context_snapshot for {stock_code}: {bool(context_snapshot)}")
+        else:
+            logger.debug(f"No analysis history found for query_id={query_id}, code={stock_code}")
 
         fallback_fundamental = db.get_latest_fundamental_snapshot(
             query_id=query_id,
             code=stock_code,
         )
+        logger.debug(f"Loaded fallback_fundamental for {stock_code}: {bool(fallback_fundamental)}")
         return context_snapshot, fallback_fundamental
     except Exception as e:
         logger.debug(
@@ -776,16 +784,17 @@ def _build_analysis_report(
         fallback_fundamental_payload=fallback_fundamental_payload,
     )
     details = None
-    has_board_details = bool(extracted_boards.get("belong_boards")) or extracted_boards.get("sector_rankings") is not None
-    if details_data or any(extracted_fundamental.values()) or has_board_details or context_snapshot is not None:
+    has_fundamental_data = bool(extracted_fundamental.get("financial_report")) or bool(extracted_fundamental.get("dividend_metrics"))
+    has_board_details = bool(extracted_boards.get("belong_boards")) or bool(extracted_boards.get("sector_rankings"))
+    if details_data or has_fundamental_data or has_board_details or context_snapshot is not None:
         details = ReportDetails(
-            news_content=details_data.get("news_summary") or details_data.get("news_content"),
-            raw_result=details_data,
-            context_snapshot=context_snapshot,
-            financial_report=extracted_fundamental.get("financial_report"),
-            dividend_metrics=extracted_fundamental.get("dividend_metrics"),
-            belong_boards=extracted_boards.get("belong_boards"),
-            sector_rankings=extracted_boards.get("sector_rankings"),
+            newsContent=details_data.get("news_summary") or details_data.get("news_content"),
+            rawResult=details_data,
+            contextSnapshot=context_snapshot,
+            financialReport=extracted_fundamental.get("financial_report"),
+            dividendMetrics=extracted_fundamental.get("dividend_metrics"),
+            belongBoards=extracted_boards.get("belong_boards"),
+            sectorRankings=extracted_boards.get("sector_rankings"),
         )
 
     return AnalysisReport(

@@ -130,6 +130,20 @@ class AnalysisService:
         sentiment_label = get_sentiment_label(result.sentiment_score, report_language)
         stock_name = get_localized_stock_name(getattr(result, "name", None), result.code, report_language)
         
+        # 提取基本面数据（从 dashboard 中获取）
+        financial_report = None
+        dividend_metrics = None
+        belong_boards = None
+        sector_rankings = None
+        
+        if hasattr(result, 'dashboard') and isinstance(result.dashboard, dict):
+            dashboard = result.dashboard
+            # 从 data_perspective 中提取财报数据
+            data_perspective = dashboard.get('data_perspective', {})
+            if isinstance(data_perspective, dict):
+                financial_report = data_perspective.get('financial_report')
+                dividend_metrics = data_perspective.get('dividend_metrics')
+        
         # 构建报告结构
         report = {
             "meta": {
@@ -160,6 +174,10 @@ class AnalysisService:
                 "technical_analysis": result.technical_analysis,
                 "fundamental_analysis": result.fundamental_analysis,
                 "risk_warning": result.risk_warning,
+                "financial_report": financial_report,
+                "dividend_metrics": dividend_metrics,
+                "belong_boards": belong_boards,
+                "sector_rankings": sector_rankings,
             }
         }
         
