@@ -34,7 +34,7 @@ export const ReportFundamental: React.FC<ReportFundamentalProps> = ({
   details,
   language = 'zh',
 }) => {
-  // 只使用真实数据：优先 details 直接字段（后端已提取），无则为空
+  // 直接提取字段（后端已提取到 details 顶层）
   const financialReport = (details?.financialReport && typeof details.financialReport === 'object' && Object.keys(details.financialReport).length > 0)
     ? details.financialReport as any
     : null;
@@ -54,46 +54,96 @@ export const ReportFundamental: React.FC<ReportFundamentalProps> = ({
     ? details.sectorRankings as any
     : null;
 
-  const hasAnyData = financialReport || dividendMetrics || belongBoards || sectorRankings;
+  // 从 contextSnapshot 提取更丰富的基本面数据
+  const fc = details?.contextSnapshot?.enhanced_context?.fundamental_context as any;
+  const valuation = fc?.valuation?.data ?? null;
+  const growth = fc?.growth?.data ?? null;
+  const capitalFlow = fc?.capital_flow?.data ?? null;
+  const dragonTiger = fc?.dragon_tiger?.data ?? null;
+
+  const hasAnyData = financialReport || dividendMetrics || belongBoards || sectorRankings || valuation || growth;
 
   const labels = {
     zh: {
       fundamental: '基本面',
       noData: '暂无基本面数据，重新分析可获取',
+      valuation: '估值指标',
+      pe: '市盈率(PE)',
+      pb: '市净率(PB)',
+      totalMv: '总市值',
       financialReport: '财务数据',
       reportDate: '报告期',
       revenue: '营业收入',
       netProfit: '归母净利润',
       operatingCashFlow: '经营现金流',
       roe: 'ROE',
+      growth: '成长能力',
+      revenueYoy: '营收同比',
+      netProfitYoy: '净利润同比',
+      grossMargin: '毛利率',
+      capitalFlow: '资金动向',
+      mainNetInflow: '主力净流入',
+      dragonTiger: '龙虎榜',
+      dtCount: '近期上榜',
+      dtLatest: '最近上榜日',
       dividend: '分红指标',
       ttmDividend: 'TTM每股分红',
       ttmYield: 'TTM股息率',
       belongBoards: '所属板块',
-      sectorRankings: '板块资金',
-      topGainers: '净流入TOP',
-      topLosers: '净流出TOP',
+      sectorRankings: '板块涨跌榜',
+      topGainers: '涨幅TOP',
+      topLosers: '跌幅TOP',
     },
     en: {
       fundamental: 'Fundamentals',
       noData: 'No fundamental data. Re-analyze to fetch.',
+      valuation: 'Valuation',
+      pe: 'PE Ratio',
+      pb: 'PB Ratio',
+      totalMv: 'Market Cap',
       financialReport: 'Financial Report',
       reportDate: 'Report Date',
       revenue: 'Revenue',
       netProfit: 'Net Profit',
-      operatingCashFlow: 'Operating Cash Flow',
+      operatingCashFlow: 'Operating CF',
       roe: 'ROE',
+      growth: 'Growth',
+      revenueYoy: 'Revenue YoY',
+      netProfitYoy: 'Net Profit YoY',
+      grossMargin: 'Gross Margin',
+      capitalFlow: 'Capital Flow',
+      mainNetInflow: 'Main Net Inflow',
+      dragonTiger: 'Dragon Tiger',
+      dtCount: 'Recent Listed',
+      dtLatest: 'Latest Date',
       dividend: 'Dividend',
-      ttmDividend: 'TTM Dividend/Share',
+      ttmDividend: 'TTM Div/Share',
       ttmYield: 'TTM Yield',
       belongBoards: 'Sectors',
-      sectorRankings: 'Sector Flow',
-      topGainers: 'Top Inflow',
-      topLosers: 'Top Outflow',
+      sectorRankings: 'Sector Ranking',
+      topGainers: 'Top Gainers',
+      topLosers: 'Top Losers',
     },
   };
 
   const t = labels[language] || labels.zh;
+
+  // 带颜色的数值行
+  const Row = ({ label, value, colored = false, reverse = false }: { label: string; value: string; colored?: boolean; reverse?: boolean }) => {
+    let colorClass = 'text-foreground';
+    if (colored) {
+      const num = parseFloat(value);
+      if (!isNaN(num)) {
+        colorClass = (reverse ? num <= 0 : num >= 0) ? 'text-success' : 'text-danger';
+      }
+    }
+    return (
+      <div className="flex justify-between items-center text-sm">
+        <span className="text-secondary-text">{label}</span>
+        <span className={`font-mono ${colorClass}`}>{value}</span>
+      </div>
+    );
+  };
 
   return (
     <Card variant="gradient" padding="md" className="animate-fade-in">
@@ -105,44 +155,104 @@ export const ReportFundamental: React.FC<ReportFundamentalProps> = ({
         <p className="text-sm text-secondary-text">{t.noData}</p>
       ) : (
         <div className="space-y-4">
+
+          {/* 估值指标 */}
+          {valuation && (
+            <div className="rounded-lg bg-surface/50 p-3">
+              <p className="text-xs font-semibold text-secondary-text mb-2 uppercase tracking-wide">{t.valuation}</p>
+              <div className="grid grid-cols-3 gap-2">
+                {valuation.pe_ratio != null && (
+                  <div className="text-center">
+                    <p className="text-xs text-secondary-text">{t.pe}</p>
+                    <p className="font-mono text-sm text-foreground font-semibold">{formatNumber(valuation.pe_ratio)}x</p>
+                  </div>
+                )}
+                {valuation.pb_ratio != null && (
+                  <div className="text-center">
+                    <p className="text-xs text-secondary-text">{t.pb}</p>
+                    <p className="font-mono text-sm text-foreground font-semibold">{formatNumber(valuation.pb_ratio)}x</p>
+                  </div>
+                )}
+                {valuation.total_mv != null && (
+                  <div className="text-center">
+                    <p className="text-xs text-secondary-text">{t.totalMv}</p>
+                    <p className="font-mono text-sm text-foreground font-semibold">{formatCurrency(valuation.total_mv)}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* 财务数据 */}
           {financialReport && (
             <div className="rounded-lg bg-surface/50 p-3">
               <p className="text-xs font-semibold text-secondary-text mb-2 uppercase tracking-wide">{t.financialReport}</p>
               <div className="space-y-2">
                 {financialReport.report_date && (
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-secondary-text">{t.reportDate}</span>
-                    <span className="font-mono text-foreground">{String(financialReport.report_date)}</span>
-                  </div>
+                  <Row label={t.reportDate} value={String(financialReport.report_date)} />
                 )}
                 {financialReport.revenue != null && (
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-secondary-text">{t.revenue}</span>
-                    <span className="font-mono text-foreground">{formatCurrency(financialReport.revenue as number)}</span>
-                  </div>
+                  <Row label={t.revenue} value={formatCurrency(financialReport.revenue)} />
                 )}
                 {financialReport.net_profit_parent != null && (
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-secondary-text">{t.netProfit}</span>
-                    <span className={`font-mono ${Number(financialReport.net_profit_parent) >= 0 ? 'text-success' : 'text-danger'}`}>
-                      {formatCurrency(financialReport.net_profit_parent as number)}
-                    </span>
-                  </div>
+                  <Row label={t.netProfit} value={formatCurrency(financialReport.net_profit_parent)} colored />
                 )}
                 {financialReport.operating_cash_flow != null && (
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-secondary-text">{t.operatingCashFlow}</span>
-                    <span className={`font-mono ${Number(financialReport.operating_cash_flow) >= 0 ? 'text-success' : 'text-danger'}`}>
-                      {formatCurrency(financialReport.operating_cash_flow as number)}
-                    </span>
-                  </div>
+                  <Row label={t.operatingCashFlow} value={formatCurrency(financialReport.operating_cash_flow)} colored />
                 )}
                 {financialReport.roe != null && (
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-secondary-text">{t.roe}</span>
-                    <span className="font-mono text-foreground">{formatPercent(financialReport.roe as number)}</span>
-                  </div>
+                  <Row label={t.roe} value={formatPercent(financialReport.roe)} />
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 成长能力 */}
+          {growth && (
+            <div className="rounded-lg bg-surface/50 p-3">
+              <p className="text-xs font-semibold text-secondary-text mb-2 uppercase tracking-wide">{t.growth}</p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                {growth.revenue_yoy != null && (
+                  <Row label={t.revenueYoy} value={formatPercent(growth.revenue_yoy)} colored />
+                )}
+                {growth.net_profit_yoy != null && (
+                  <Row label={t.netProfitYoy} value={formatPercent(growth.net_profit_yoy)} colored />
+                )}
+                {growth.gross_margin != null && (
+                  <Row label={t.grossMargin} value={formatPercent(growth.gross_margin)} />
+                )}
+                {growth.roe != null && (
+                  <Row label={t.roe} value={formatPercent(growth.roe)} />
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 资金动向 */}
+          {capitalFlow && (
+            <div className="rounded-lg bg-surface/50 p-3">
+              <p className="text-xs font-semibold text-secondary-text mb-2 uppercase tracking-wide">{t.capitalFlow}</p>
+              <div className="space-y-2">
+                {capitalFlow.stock_flow?.main_net_inflow != null && (
+                  <Row
+                    label={t.mainNetInflow}
+                    value={formatCurrency(capitalFlow.stock_flow.main_net_inflow)}
+                    colored
+                  />
+                )}
+                {capitalFlow.stock_flow?.inflow_5d != null && (
+                  <Row
+                    label="5日净流入"
+                    value={formatCurrency(capitalFlow.stock_flow.inflow_5d)}
+                    colored
+                  />
+                )}
+                {capitalFlow.stock_flow?.inflow_10d != null && (
+                  <Row
+                    label="10日净流入"
+                    value={formatCurrency(capitalFlow.stock_flow.inflow_10d)}
+                    colored
+                  />
                 )}
               </div>
             </div>
@@ -154,16 +264,23 @@ export const ReportFundamental: React.FC<ReportFundamentalProps> = ({
               <p className="text-xs font-semibold text-secondary-text mb-2 uppercase tracking-wide">{t.dividend}</p>
               <div className="space-y-2">
                 {dividendMetrics.ttm_cash_dividend_per_share != null && (
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-secondary-text">{t.ttmDividend}</span>
-                    <span className="font-mono text-foreground">{formatNumber(dividendMetrics.ttm_cash_dividend_per_share as number, 4)} 元</span>
-                  </div>
+                  <Row label={t.ttmDividend} value={`${formatNumber(dividendMetrics.ttm_cash_dividend_per_share, 4)} 元`} />
                 )}
                 {dividendMetrics.ttm_dividend_yield_pct != null && (
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-secondary-text">{t.ttmYield}</span>
-                    <span className="font-mono text-foreground">{formatPercent(dividendMetrics.ttm_dividend_yield_pct as number)}</span>
-                  </div>
+                  <Row label={t.ttmYield} value={formatPercent(dividendMetrics.ttm_dividend_yield_pct)} />
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 龙虎榜 */}
+          {dragonTiger && dragonTiger.recent_count > 0 && (
+            <div className="rounded-lg bg-surface/50 p-3">
+              <p className="text-xs font-semibold text-secondary-text mb-2 uppercase tracking-wide">{t.dragonTiger}</p>
+              <div className="space-y-2">
+                <Row label={t.dtCount} value={`${dragonTiger.recent_count} 次`} />
+                {dragonTiger.latest_date && (
+                  <Row label={t.dtLatest} value={String(dragonTiger.latest_date)} />
                 )}
               </div>
             </div>
@@ -186,7 +303,7 @@ export const ReportFundamental: React.FC<ReportFundamentalProps> = ({
             </div>
           )}
 
-          {/* 板块资金 */}
+          {/* 板块涨跌榜 */}
           {sectorRankings && (
             <div className="rounded-lg bg-surface/50 p-3">
               <p className="text-xs font-semibold text-secondary-text mb-2 uppercase tracking-wide">{t.sectorRankings}</p>
@@ -194,10 +311,12 @@ export const ReportFundamental: React.FC<ReportFundamentalProps> = ({
                 {Array.isArray(sectorRankings.top) && sectorRankings.top.length > 0 && (
                   <div>
                     <p className="text-xs text-success mb-1.5">{t.topGainers}</p>
-                    {sectorRankings.top.slice(0, 3).map((item: any, idx: number) => (
+                    {sectorRankings.top.slice(0, 5).map((item: any, idx: number) => (
                       <div key={idx} className="flex justify-between items-center text-xs py-0.5">
                         <span className="text-secondary-text truncate">{item.name}</span>
-                        <span className="text-success font-mono ml-1">{item.net_inflow != null ? formatCurrency(item.net_inflow) : formatPercent(item.change_pct)}</span>
+                        <span className="text-success font-mono ml-1">
+                          {item.net_inflow != null ? formatCurrency(item.net_inflow) : formatPercent(item.change_pct)}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -205,10 +324,12 @@ export const ReportFundamental: React.FC<ReportFundamentalProps> = ({
                 {Array.isArray(sectorRankings.bottom) && sectorRankings.bottom.length > 0 && (
                   <div>
                     <p className="text-xs text-danger mb-1.5">{t.topLosers}</p>
-                    {sectorRankings.bottom.slice(0, 3).map((item: any, idx: number) => (
+                    {sectorRankings.bottom.slice(0, 5).map((item: any, idx: number) => (
                       <div key={idx} className="flex justify-between items-center text-xs py-0.5">
                         <span className="text-secondary-text truncate">{item.name}</span>
-                        <span className="text-danger font-mono ml-1">{item.net_inflow != null ? formatCurrency(item.net_inflow) : formatPercent(item.change_pct)}</span>
+                        <span className="text-danger font-mono ml-1">
+                          {item.net_inflow != null ? formatCurrency(item.net_inflow) : formatPercent(item.change_pct)}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -216,6 +337,7 @@ export const ReportFundamental: React.FC<ReportFundamentalProps> = ({
               </div>
             </div>
           )}
+
         </div>
       )}
     </Card>
