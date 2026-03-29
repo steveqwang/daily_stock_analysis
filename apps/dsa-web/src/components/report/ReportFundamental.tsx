@@ -47,15 +47,17 @@ export const ReportFundamental: React.FC<ReportFundamentalProps> = ({
     ? details.belongBoards as any[]
     : null;
 
-  const sectorRankings = (details?.sectorRankings && typeof details.sectorRankings === 'object' && (
-    (Array.isArray(details.sectorRankings.top) && details.sectorRankings.top.length > 0) ||
-    (Array.isArray(details.sectorRankings.bottom) && details.sectorRankings.bottom.length > 0)
-  ))
-    ? details.sectorRankings as any
-    : null;
-
   // 从 contextSnapshot 提取更丰富的基本面数据
   const fc = details?.contextSnapshot?.enhanced_context?.fundamental_context as any;
+
+  // 优先用 capital_flow 里的 sector_rankings（含 net_inflow），其次用顶层 sectorRankings（含 change_pct）
+  const capitalFlowSectorRankings = fc?.capital_flow?.data?.sector_rankings ?? null;
+  const sectorRankings = (() => {
+    const src = capitalFlowSectorRankings ?? details?.sectorRankings;
+    if (!src || typeof src !== 'object') return null;
+    if ((Array.isArray(src.top) && src.top.length > 0) || (Array.isArray(src.bottom) && src.bottom.length > 0)) return src as any;
+    return null;
+  })();
   const valuation = fc?.valuation?.data ?? null;
   const growth = fc?.growth?.data ?? null;
   const capitalFlow = fc?.capital_flow?.data ?? null;

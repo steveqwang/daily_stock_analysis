@@ -52,7 +52,7 @@ const buildBoardSignalMap = (details?: ReportDetailsType): Map<string, BoardSign
     }
     signalMap.set(normalizedName, {
       status: 'leading',
-      changePct: coerceFiniteNumber(item.changePct),
+      changePct: coerceFiniteNumber((item as any).change_pct ?? item.changePct),
     });
   });
 
@@ -63,7 +63,7 @@ const buildBoardSignalMap = (details?: ReportDetailsType): Map<string, BoardSign
     }
     signalMap.set(normalizedName, {
       status: 'lagging',
-      changePct: coerceFiniteNumber(item.changePct),
+      changePct: coerceFiniteNumber((item as any).change_pct ?? item.changePct),
     });
   });
 
